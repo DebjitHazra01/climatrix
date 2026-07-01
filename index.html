@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Climatrix: Spatial Decision Support System (ISRO Hackathon)</title>
+  <meta name="description" content="Urban Heat Mitigation Spatial Decision Support System utilizing Bhuvan and Cartosat datasets, predictive neural networks, and multi-user roles.">
+  
+  <!-- Leaflet GIS Mapping CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-mode user-role-planner">
+  <div class="glass-bg"></div>
+  
+  <header class="app-header">
+    <div class="header-logo">
+      <div class="logo-icon"></div>
+      <div class="logo-text">
+        <h1>Climatrix <span class="version-tag">SDSS v3.2</span></h1>
+        <span>ISRO HACKATHON: Urban Heat Resilience</span>
+      </div>
+    </div>
+
+    <!-- API online status badge indicator -->
+    <div class="api-status-container">
+      <span id="api-status-badge" class="badge-api offline">API: OFFLINE</span>
+    </div>
+
+    <!-- Active User Role switcher -->
+    <div class="role-selector-wrapper">
+      <span class="selector-label">User Role View:</span>
+      <select id="select-user-role" class="role-dropdown">
+        <option value="planner" selected>Urban Planner (Zoning & Interventions)</option>
+        <option value="engineer">Municipal Engineer (Costs & Physics)</option>
+        <option value="disaster">Disaster Officer (Risk & Heat Stress)</option>
+        <option value="policymaker">Policy Maker (Strategy & Decadal Projections)</option>
+      </select>
+    </div>
+    
+    <div class="preset-selector-container">
+      <span class="selector-label">CRS Presets:</span>
+      <div class="preset-buttons">
+        <button id="btn-preset-delhi" class="btn-preset active" data-preset="delhi">Delhi Core</button>
+        <button id="btn-preset-mumbai" class="btn-preset" data-preset="mumbai">Mumbai Peninsula</button>
+        <button id="btn-preset-bengaluru" class="btn-preset" data-preset="bengaluru">Bengaluru Hub</button>
+      </div>
+    </div>
+
+    <!-- Heatwave Emergency Mode Button -->
+    <div class="emergency-mode-container" style="display:flex; align-items:center;">
+      <button id="btn-emergency-toggle" class="btn-preset" style="border: 1px solid rgba(244,63,94,0.3); color: var(--accent-rose); background: rgba(244,63,94,0.05); font-weight: 700; height: 22px; padding: 0 0.5rem; font-size: 0.6rem; display: flex; align-items: center; gap: 0.25rem; border-radius: 4px; cursor: pointer; transition: all 0.2s ease;">
+        <span class="pulse-dot" style="display:inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-rose); box-shadow: 0 0 8px var(--accent-rose);"></span>
+        <span id="emergency-mode-text">Standard Mode</span>
+      </button>
+    </div>
+
+    <div class="header-actions">
+      <button id="btn-open-arch" class="btn-secondary">View AI Pipeline</button>
+      <button id="btn-export-geojson" class="btn-secondary">Export GeoJSON</button>
+      <button id="btn-open-report" class="btn-primary highlight-btn">Export Report</button>
+      <button id="btn-reset-grid" class="btn-secondary">Reset Plan</button>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <!-- LEFT SIDEBAR: ISRO Ingestion, Climate Projections, and Painting Brushes -->
+    <aside class="sidebar-left glass-card">
+      
+      <!-- Demo Sequence Guided Wizard card -->
+      <section class="control-section guided-workflow-card" style="border-bottom: 1.5px solid var(--accent-indigo); background: rgba(99,102,241,0.03); margin-bottom: 0.25rem; padding-bottom: 0.55rem;">
+        <h2 style="color: var(--accent-indigo); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <span style="display:flex; align-items:center; gap:0.25rem;">⚡ Demo Wizard</span>
+          <span class="badge" id="wizard-step-badge" style="background: rgba(99,102,241,0.15); border: 1px solid var(--accent-indigo); color: #ffffff; font-size: 0.52rem; padding: 0.08rem 0.25rem; border-radius:3px;">Step 1/8</span>
+        </h2>
+        <div class="wizard-body" style="font-size: 0.65rem; margin-top: 0.3rem; display: flex; flex-direction: column; gap: 0.35rem;">
+          <div id="wizard-instruction" style="font-weight: 500; color: #ffffff; line-height: 1.3;">
+            <strong>1. Upload GeoTIFF:</strong> Choose a .TIFF file or click <em>Ingest Raster</em> to parse multi-band satellite data.
+          </div>
+          <div class="wizard-actions" style="display: flex; gap: 0.25rem; margin-top: 0.1rem;">
+            <button id="btn-wizard-action" class="btn-primary" style="flex: 1; font-size: 0.62rem; padding: 0.25rem 0.45rem; line-height: 1; height: 22px;">Trigger Ingest</button>
+            <button id="btn-wizard-skip" class="btn-secondary" style="font-size: 0.62rem; padding: 0.25rem 0.45rem; line-height: 1; height: 22px;">Skip</button>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Role Planner Element: Ingestion & Terminal Log Console -->
+      <section class="control-section section-role-planner section-role-engineer">
+        <h2><span class="icon-satellite"></span>ISRO/Bhuvan Data Portal</h2>
+        <p class="section-desc">Ingest optical bands (Cartosat, Resourcesat LISS-IV) for NDVI and albedo, or thermal band sensors (Landsat TIRS, INSAT-3D, ECOSTRESS) for LST.</p>
+        <div class="satellite-portal">
+          <div class="file-uploader-box">
+            <select id="select-satellite-layer">
+              <option value="landsat_lst">Landsat-8/9 Thermal Infrared Sensor (TIRS) LST</option>
+              <option value="sentinel_ndvi">Resourcesat-2 LISS-IV Vegetation (NDVI)</option>
+              <option value="ecostress_diurnal">ECOSTRESS Space Station Diurnal LST</option>
+              <option value="insat_meteo">INSAT-3D Meteorological Profile (Ta, RH)</option>
+            </select>
+            
+            <input type="file" id="raster-file-picker" accept=".tif,.tiff" class="hidden">
+            <div class="uploader-buttons-row">
+              <button id="btn-trigger-picker" class="btn-secondary">Choose .TIFF File</button>
+              <button id="btn-mock-upload" class="btn-primary">Ingest Raster</button>
+            </div>
+          </div>
+
+          <!-- Dataset Metadata Card -->
+          <div class="metadata-card" id="metadata-card">
+            <div class="metadata-row"><span>Resolution:</span><strong id="meta-resolution">--</strong></div>
+            <div class="metadata-row"><span>Date:</span><strong id="meta-date">--</strong></div>
+            <div class="metadata-row"><span>Projection:</span><strong id="meta-projection">--</strong></div>
+            <div class="metadata-row"><span>Bands:</span><strong id="meta-bands">--</strong></div>
+            <div class="metadata-row"><span>Cloud Cover:</span><strong id="meta-cloud">--</strong></div>
+            <div class="metadata-row"><span>Source:</span><strong id="meta-source">--</strong></div>
+          </div>
+          
+          <!-- Monospaced Terminal Console log for actual binary parsing logs -->
+          <div class="terminal-container">
+            <div class="terminal-header">GIS Binary Parser Terminal Console</div>
+            <div class="terminal-body" id="terminal-console">
+              <div class="terminal-line text-cyan">[SYSTEM] Ingestion pipeline initialized. Ready to parse raster.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Role Policymaker Element: IPCC decadal projection years -->
+      <section class="control-section section-role-policymaker section-role-planner">
+        <h2><span class="icon-env font-cyan"></span>Decadal Timeline</h2>
+        <p class="section-desc">Simulate cellular sprawl expansions and climate warning offsets.</p>
+        
+        <div class="slider-group">
+          <div class="slider-header">
+            <label for="input-target-year">Target Projection Year</label>
+            <span class="slider-val text-cyan" id="val-target-year">--</span>
+          </div>
+          <input type="range" id="input-target-year" min="2026" max="2050" step="1" value="2026">
+        </div>
+
+        <div class="dropdown-group">
+          <label for="select-ipcc-pathway">IPCC Emission Scenario (CMIP6)</label>
+          <select id="select-ipcc-pathway">
+            <option value="ssp126">SSP1-2.6: Low Warming (+1.5°C Global)</option>
+            <option value="ssp245" selected>SSP2-4.5: Middle of the Road (+2.7°C)</option>
+            <option value="ssp585">SSP5-8.5: Extreme Warming (+4.4°C)</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Role Planner Element: Painting canvas grids -->
+      <section class="control-section section-role-planner">
+        <h2><span class="icon-paint font-indigo"></span>Mitigation Brushes</h2>
+        <p class="section-desc">Select cooling solution and paint cells on the Leaflet map.</p>
+        <div class="paint-grid">
+          <button class="btn-paint active" data-type="inspect" id="brush-inspect">
+            <span class="color-dot blue" style="background-color: var(--accent-cyan);"></span>
+            <div class="brush-label">
+              <strong>Geospatial Inspector (Select)</strong>
+              <span>Inspect cell features & SHAP drivers</span>
+            </div>
+          </button>
+          <button class="btn-paint" data-type="urban_park" id="brush-park">
+            <span class="color-dot green"></span>
+            <div class="brush-label">
+              <strong>Urban Parks ($120/cell)</strong>
+              <span>↑ Shaded vegetation, low resistance</span>
+            </div>
+          </button>
+          <button class="btn-paint" data-type="cool_roof" id="brush-cool-roof">
+            <span class="color-dot white"></span>
+            <div class="brush-label">
+              <strong>Cool Roofs ($15/cell)</strong>
+              <span>↑ Roof reflectivity, Low cost</span>
+            </div>
+          </button>
+          <button class="btn-paint" data-type="water_body" id="brush-water">
+            <span class="color-dot blue"></span>
+            <div class="brush-label">
+              <strong>Water Body ($250/cell)</strong>
+              <span>Evaporative cooling sink, high cooling</span>
+            </div>
+          </button>
+          <button class="btn-paint" data-type="dense_urban" id="brush-dense-urban">
+            <span class="color-dot grey"></span>
+            <div class="brush-label">
+              <strong>Dense Concrete</strong>
+              <span>Asphalt/Impervious high-density zone</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="brush-settings">
+          <label for="brush-size">Brush Diameter:</label>
+          <div class="brush-size-controls">
+            <input type="range" id="brush-size" min="1" max="5" value="2">
+            <span id="brush-size-val">2x2</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Role Disaster Element: District vulnerability & Ward priority lists -->
+      <section class="control-section section-role-disaster">
+        <h2><span class="icon-chart"></span>District Ward Risk Rankings</h2>
+        <p class="section-desc">Wards prioritized by heat hazards and human vulnerability.</p>
+        <div class="ward-ranking-list" id="ward-ranking-list">
+          <!-- Populated in app.js -->
+        </div>
+      </section>
+    </aside>
+
+    <!-- CENTER CONTENT: Visualizers & GIS Map -->
+    <div class="center-content">
+      <div class="map-container glass-card">
+        <div class="map-header">
+          <div class="map-title-row">
+            <h2>Live GIS Satellite Map</h2>
+            <div class="gis-overlay-badges">
+              <span id="crs-badge" class="badge font-cyan">UTM Zone 43N</span>
+              <span id="sim-status" class="badge">Solving Dynamics</span>
+            </div>
+          </div>
+          
+          <div class="view-layers">
+            <button class="btn-layer active" data-layer="lst">LST Thermal Map</button>
+            <button class="btn-layer" data-layer="wbgt">Heat Stress Index</button>
+            <button class="btn-layer" data-layer="hvi">Human Heat Risk</button>
+            <button class="btn-layer" data-layer="ndvi">Vegetation Index</button>
+            <button class="btn-layer" data-layer="albedo">Albedo Map</button>
+          </div>
+        </div>
+
+        <!-- Leaflet Map Container -->
+        <div class="canvas-wrapper">
+          <div id="leaflet-map" style="width: 100%; height: 100%;"></div>
+          <div id="canvas-overlay-text" class="canvas-overlay hidden">Computing AI Optimal Placements...</div>
+          
+          <!-- Before-vs-After Split Screen Swipe range slider -->
+          <div class="split-swipe-container" id="split-swipe-container">
+            <input type="range" id="input-split-swipe" min="0" max="100" value="100" class="split-swipe-slider">
+            <div class="split-swipe-labels">
+              <span class="split-lbl-left">Baseline (Before)</span>
+              <span class="split-lbl-right">Mitigated (After)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="map-footer">
+          <div class="overlay-toggles-row">
+            <div class="toggle-control">
+              <input type="checkbox" id="toggle-hotspots" checked>
+              <label for="toggle-hotspots">Show Statistical Heat Hotspots (z-score > 1.96)</label>
+            </div>
+            <div class="toggle-control">
+              <input type="checkbox" id="toggle-vulnerability">
+              <label for="toggle-vulnerability">Highlight High Vulnerability Wards</label>
+            </div>
+          </div>
+
+          <div class="legend-container">
+            <span class="legend-label">Scale:</span>
+            <div class="legend-bar-wrapper">
+              <div id="legend-gradient" class="legend-gradient lst-gradient"></div>
+              <div class="legend-ticks">
+                <span id="ticks-min">--</span>
+                <span id="ticks-mid">--</span>
+                <span id="ticks-max">--</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Hover telemetry inspector -->
+          <div class="cell-inspector" id="cell-inspector">
+            <span class="inspector-placeholder">Hover cell to inspect geospatial telemetry. Click cell for Local Drivers explanation.</span>
+            <div class="inspector-content hidden" id="inspector-content">
+              <div class="inspector-col">
+                <strong>Coords: <span id="insp-coords">--</span></strong>
+                <span>Ward: <span id="insp-ward">--</span></span>
+              </div>
+              <div class="inspector-col">
+                <span>LST: <strong id="insp-lst" class="font-rose">--</strong></span>
+                <span>Heat Stress: <strong id="insp-wbgt" class="font-amber">--</strong></span>
+              </div>
+              <div class="inspector-col">
+                <span>Vegetation (NDVI): <span id="insp-ndvi">--</span></span>
+                <span>Population: <span id="insp-pop">--</span></span>
+              </div>
+              <div class="inspector-col">
+                <span>Heat Load: <span id="insp-rn">--</span></span>
+                <span>Evaporative Cooling: <span id="insp-le">--</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR: KPIs, Local Attributions, Cost GA optimizer, and AI Chatbot -->
+    <aside class="sidebar-right glass-card">
+      
+      <!-- Prediction stats and uncertainties -->
+      <section class="control-section">
+        <div class="metrics-grid">
+          <div class="metric-card red-glow">
+            <span class="metric-title" id="title-avg-lst">Avg Temperature</span>
+            <span class="metric-value" id="metric-avg-lst">--</span>
+            <span class="metric-delta" id="delta-avg-lst">--</span>
+          </div>
+          <div class="metric-card orange-glow">
+            <span class="metric-title" id="title-hotspots">Hotspot Area</span>
+            <span class="metric-value" id="metric-hotspots">--</span>
+            <span class="metric-sub" id="metric-hotspots-pct">--</span>
+          </div>
+          <div class="metric-card green-glow section-role-planner section-role-disaster">
+            <span class="metric-title" id="title-hvi">Human Heat Risk</span>
+            <span class="metric-value" id="metric-hvi">--</span>
+            <span class="metric-desc" id="desc-hvi">Socioeconomic index</span>
+          </div>
+          <div class="metric-card blue-glow section-role-engineer">
+            <span class="metric-title" id="title-spent-cost">Capital Spent</span>
+            <span class="metric-value" id="metric-spent-cost">--</span>
+            <span class="metric-desc" id="desc-spent-cost">Capital allocation</span>
+          </div>
+        </div>
+
+        <!-- Model credibility and uncertainty box -->
+        <div class="credibility-box section-role-engineer section-role-policymaker">
+          <div class="credibility-header">
+            <span>Model Confidence:</span>
+            <span class="text-cyan font-bold" id="val-model-confidence">--</span>
+          </div>
+          <div class="uncertainty-range">
+            <span>Model Uncertainty: <strong id="val-model-uncertainty">--</strong></span>
+            <span>MAE: <strong id="val-validation-mae">--</strong> | R²: <strong id="val-validation-r2">--</strong></span>
+          </div>
+        </div>
+
+        <!-- Ground Truth Validation Station card -->
+        <div class="credibility-box">
+          <div class="credibility-header">
+            <span>Ground Station Match:</span>
+            <span class="text-emerald font-bold" id="val-match-status">Verifying...</span>
+          </div>
+          <div class="validation-station-table">
+            <table class="station-table">
+              <thead>
+                <tr>
+                  <th>Station</th>
+                  <th>Observed</th>
+                  <th>Predicted</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Station Airport</td>
+                  <td id="obs-airport">41.8°C</td>
+                  <td id="val-pred-airport">--</td>
+                  <td id="val-err-airport" class="font-rose">--</td>
+                </tr>
+                <tr>
+                  <td>Station Safdarjung</td>
+                  <td id="obs-safdarjung">40.2°C</td>
+                  <td id="val-pred-safdarjung">--</td>
+                  <td id="val-err-safdarjung" class="font-rose">--</td>
+                </tr>
+                <tr>
+                  <td>Station City Core</td>
+                  <td id="obs-core">43.1°C</td>
+                  <td id="val-pred-core">--</td>
+                  <td id="val-err-core" class="font-rose">--</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI Model Validation & Architecture comparisons -->
+      <section class="control-section section-role-engineer section-role-policymaker">
+        <h2><span class="icon-metrics"></span>AI Training & Model Selection</h2>
+        <div class="model-training-grid">
+          <div class="training-stats-box">
+            <div class="train-header">Model Training Logs</div>
+            <div class="train-row"><span>Samples:</span><strong>23,500</strong></div>
+            <div class="train-row"><span>Validation:</span><strong>5,000</strong></div>
+            <div class="train-row"><span>Epochs:</span><strong>120</strong></div>
+            <div class="train-row"><span>Loss:</span><strong>0.021</strong></div>
+            <div class="train-row"><span>RMSE:</span><strong>0.48°C</strong></div>
+          </div>
+          
+          <div class="model-select-box">
+            <div class="train-header">Architecture Selection</div>
+            <div class="model-rank-row"><span>Random Forest</span><span class="badge-mae">MAE 0.61</span></div>
+            <div class="model-rank-row"><span>XGBoost</span><span class="badge-mae">MAE 0.44</span></div>
+            <div class="model-rank-row active"><span>Physics-PI-CNN</span><span class="badge-mae highlight">MAE 0.38</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Local Explanations (XAI) -->
+      <section class="control-section section-role-planner section-role-engineer">
+        <h2><span class="icon-ai"></span>Local Driving Factors (SHAP)</h2>
+        <div class="xai-panel" id="xai-panel">
+          <span class="xai-placeholder">Click a grid cell to analyze model feature contributions and thermal drivers.</span>
+          <div class="xai-content hidden" id="xai-content">
+            <div class="xai-header-info">
+              <span>Attribution for Pixel: <strong id="xai-pixel-coords">(12, 15)</strong></span>
+            </div>
+            <div class="xai-waterfall-list">
+              <div class="xai-waterfall-item">
+                <span class="xai-feat-name">Roof Reflectivity Loss</span>
+                <div class="xai-bar-track">
+                  <div id="xai-bar-albedo" class="xai-bar pos" style="width: 0%;"></div>
+                </div>
+                <span class="xai-feat-val" id="xai-val-albedo">+0.0°C</span>
+              </div>
+              
+              <div class="xai-waterfall-item">
+                <span class="xai-feat-name">Vegetation Loss</span>
+                <div class="xai-bar-track">
+                  <div id="xai-bar-ndvi" class="xai-bar pos" style="width: 0%;"></div>
+                </div>
+                <span class="xai-feat-val" id="xai-val-ndvi">+0.0°C</span>
+              </div>
+
+              <div class="xai-waterfall-item">
+                <span class="xai-feat-name">Wind Flow Friction</span>
+                <div class="xai-bar-track">
+                  <div id="xai-bar-rough" class="xai-bar pos" style="width: 0%;"></div>
+                </div>
+                <span class="xai-feat-val" id="xai-val-rough">+0.0°C</span>
+              </div>
+
+              <div class="xai-waterfall-item">
+                <span class="xai-feat-name">Microclimate Correction</span>
+                <div class="xai-bar-track">
+                  <div id="xai-bar-advection" class="xai-bar neg" style="width: 0%;"></div>
+                </div>
+                <span class="xai-feat-val text-emerald" id="xai-val-advection">-0.0°C</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GA Optimizer -->
+      <section class="control-section section-role-engineer section-role-planner">
+        <h2><span class="icon-opt font-emerald"></span>Spatial Budget Optimizer</h2>
+        <p class="section-desc">Compute optimal spatial configurations subject to financial budget ceilings.</p>
+        
+        <div class="opt-controls">
+          <div class="slider-group">
+            <div class="slider-header">
+              <label for="input-opt-budget">Total Capital Budget ($)</label>
+              <span class="slider-val text-emerald" id="val-opt-budget">--</span>
+            </div>
+            <input type="range" id="input-opt-budget" min="10000" max="150000" step="5000" value="60000">
+            <span class="slider-hint">Constraint: Parks = $120, Roofs = $15, Water = $250</span>
+          </div>
+
+          <div class="opt-goal-selector">
+            <label for="select-opt-algorithm">Optimization Algorithm</label>
+            <select id="select-opt-algorithm">
+              <option value="ga" selected>Genetic Algorithm (GA)</option>
+              <option value="pso">Particle Swarm Optimization (PSO)</option>
+              <option value="sa">Simulated Annealing (SA)</option>
+              <option value="nsga2">NSGA-II (Multi-Objective)</option>
+            </select>
+          </div>
+
+          <div class="opt-goal-selector">
+            <label for="opt-objective">Optimization Objective Function</label>
+            <select id="opt-objective">
+              <option value="minimize_hvi" selected>Minimize Human Heat Risk (HVI)</option>
+              <option value="minimize_lst">Minimize Mean LST Temperature</option>
+              <option value="minimize_hotspots">Minimize Extreme Hotspots</option>
+            </select>
+          </div>
+
+          <div class="opt-buttons">
+            <button id="btn-optimize-run" class="btn-primary">Execute Optimizer</button>
+            <button id="btn-optimize-stop" class="btn-secondary hidden">Stop</button>
+          </div>
+        </div>
+
+        <div id="opt-progress-box" class="opt-progress-box hidden">
+          <div class="progress-title-row">
+            <span>Genetic Solver:</span>
+            <span id="opt-gen-val">Gen 0 / 60</span>
+          </div>
+          <div class="progress-track">
+            <div id="opt-progress-bar" class="progress-bar" style="width: 0%;"></div>
+          </div>
+          <div class="progress-details">
+            <span>Best Temp: <strong id="opt-best-lst">--</strong></span>
+            <span>Spent: <strong id="opt-best-cost">--</strong></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI Chatbot -->
+      <section class="control-section">
+        <h2><span class="icon-ai font-purple"></span>Climatrix Assistant</h2>
+        <p class="section-desc">Ask queries regarding localized drivers, budgets, or heat risk profiles.</p>
+        <div class="chatbot-container">
+          <div class="chatbot-messages" id="chatbot-messages">
+            <div class="chat-bubble bot-bubble">Hello! I am Climatrix Assistant. Click a prompt below or type your query.</div>
+          </div>
+          <div class="chatbot-prompts" id="chatbot-prompts">
+            <button class="btn-prompt" data-query="why_hot">Why is the critical ward hot?</button>
+            <button class="btn-prompt" data-query="roi">Which cooling tool has the best ROI?</button>
+            <button class="btn-prompt" data-query="double_budget">What happens if we double the budget?</button>
+          </div>
+          <div class="chatbot-input-row">
+            <input type="text" id="chatbot-input" placeholder="Type a question...">
+            <button id="btn-chatbot-send" class="btn-primary">Send</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- BOTTOM CARD: Strategy Comparisons & Automatic AI Recommendations -->
+  <footer class="app-footer-stats">
+    <div class="footer-layout-grid">
+      <!-- Strategy Comparisons Panel -->
+      <div class="bottom-card glass-card section-role-policymaker section-role-planner">
+        <div class="card-header-small">
+          <h3><span class="icon-chart"></span>Strategic Policy Comparisons Dashboard</h3>
+          <span class="badge font-emerald">Multi-Objective Decision Matrix</span>
+        </div>
+        <div class="table-container">
+          <table class="policy-compare-table" id="policy-compare-table">
+            <thead>
+              <tr>
+                <th>Policy Strategy</th>
+                <th>Capital Cost</th>
+                <th>Mean Cooling Drop</th>
+                <th>Population Protected</th>
+                <th>CO₂ Sequestration</th>
+                <th>Cooling ROI Ratio</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated in app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AI Automated Recommendations Panel -->
+      <div class="bottom-card glass-card section-role-planner section-role-disaster">
+        <div class="card-header-small">
+          <h3><span class="icon-opt"></span>🥇 AI Automated Intervention Planner</h3>
+          <span class="badge font-rose">Decision Support Active</span>
+        </div>
+        <div class="recommendations-container" id="recommendations-container" style="display:flex; flex-direction:column; gap:0.4rem;">
+          <!-- Populated in app.js -->
+        </div>
+        <div id="ai-why-container" style="margin-top: 0.35rem; display: flex; flex-direction: column; gap: 0.3rem;">
+          <!-- Populated in app.js -->
+        </div>
+      </div>
+      
+      <!-- Time-Series Chart -->
+      <div class="bottom-card glass-card section-role-policymaker">
+        <div class="card-header-small">
+          <h3><span class="icon-chart"></span>Multi-Decadal Temperature Projections</h3>
+          <span class="badge text-cyan" id="proj-scenario-badge">SSP2-4.5 Projection</span>
+        </div>
+        <div class="decadal-chart-container">
+          <svg id="decadal-trend-chart" viewBox="0 0 450 110"></svg>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Print Modal: Executive Planning Report -->
+  <div class="modal-backdrop hidden" id="report-modal">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h2>Executive Planning Report</h2>
+        <div class="modal-header-actions">
+          <button id="btn-print-report" class="btn-primary">Print / Export PDF</button>
+          <button id="btn-close-report" class="btn-secondary">Close</button>
+        </div>
+      </div>
+      <div class="modal-body print-section" id="print-area">
+        <div class="report-header" style="display: flex; align-items: center; gap: 0.8rem; border-bottom: 2px solid var(--accent-indigo); padding-bottom: 0.5rem; margin-bottom: 0.8rem;">
+          <img src="logo.jpg" style="width: 2.8rem; height: 2.8rem; border-radius: 0.4rem; box-shadow: 0 0 10px rgba(6,182,212,0.15);" alt="Climatrix Logo">
+          <div>
+            <h1 style="margin: 0; font-size: 1.25rem;">Urban Heat Mitigation Plan & Spatial Optimization Report</h1>
+            <p class="report-meta" style="margin: 0.15rem 0 0 0;">Generated by Climatrix SDSS • Boundary Preset: <span id="rep-preset-name">Delhi Core</span> • Projection Year: <span id="rep-target-year">2026</span></p>
+          </div>
+        </div>
+
+        <div class="report-row">
+          <div class="report-block">
+            <h3>1. Microclimate Hazard Baseline</h3>
+            <table class="report-table">
+              <tr>
+                <td>Baseline Average LST</td>
+                <td id="rep-base-lst">--</td>
+              </tr>
+              <tr>
+                <td>Warming Pathway (CMIP6)</td>
+                <td id="rep-ipcc-scenario">--</td>
+              </tr>
+              <tr>
+                <td>Projected Average LST</td>
+                <td id="rep-proj-lst">--</td>
+              </tr>
+              <tr>
+                <td>Statistical Heat Hotspots</td>
+                <td id="rep-base-hotspots">--</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="report-block">
+            <h3>2. Optimized Intervention Summary</h3>
+            <table class="report-table">
+              <tr>
+                <td>Total Capital Budget Limit</td>
+                <td id="rep-budget">--</td>
+              </tr>
+              <tr>
+                <td>Actual Intervention Cost</td>
+                <td id="rep-cost-spent">--</td>
+              </tr>
+              <tr>
+                <td>Average LST Cooling Drop</td>
+                <td id="rep-cooling-drop">--</td>
+              </tr>
+              <tr>
+                <td>HVI Risk Reduction</td>
+                <td id="rep-hvi-drop">--</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="report-section-full">
+          <h3>3. Key Drivers & Contribution Attribution</h3>
+          <p>Local feature sensitivity analyses indicate that the urban heat island is heavily driven by <strong>NDVI Vegetation Deficit</strong>, contributing an average of $+3.1^\circ\text{C}$ to hotspot zones, and **Albedo Deficits** due to dark concrete roofing, contributing $+2.2^\circ\text{C}$.</p>
+        </div>
+
+        <div class="report-section-full">
+          <h3>4. Optimized Cooling Placement Strategy</h3>
+          <table class="report-table-full">
+            <thead>
+              <tr>
+                <th>Intervention Type</th>
+                <th>Quantity Placed (Cells)</th>
+                <th>Unit Cost</th>
+                <th>Subtotal Cost</th>
+                <th>Geographic Placement Priority</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Urban Parks / Greening</td>
+                <td id="rep-qty-park">0</td>
+                <td>$120</td>
+                <td id="rep-cost-park">$0</td>
+                <td>High-Vulnerability Slums & High-Roughness Residential Canyons</td>
+              </tr>
+              <tr>
+                <td>Cool Roofs / Albedo Coating</td>
+                <td id="rep-qty-roof">0</td>
+                <td>$15</td>
+                <td id="rep-cost-roof">$0</td>
+                <td>Dense Commercial Complexes & Low-Rise Roof Spans</td>
+              </tr>
+              <tr>
+                <td>Water Body Restoration</td>
+                <td id="rep-qty-water">0</td>
+                <td>$250</td>
+                <td id="rep-cost-water">$0</td>
+                <td>Outlying Parks & High-Exposure Bare Soils</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="report-footer">
+          <p>This document is generated by Climatrix SDSS modeling engine using optical datasets (Cartosat, Resourcesat LISS-IV) and thermal sensors (Landsat-8/9 TIRS, INSAT-3D LST, ECOSTRESS).</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Pipeline and Deployment Architecture Flowchart Modal -->
+  <div class="modal-backdrop hidden" id="arch-modal">
+    <div class="modal-content glass-card" style="max-width: 900px; height: 90vh;">
+      <div class="modal-header">
+        <h2>AI Pipeline & Deployment Architecture</h2>
+        <button id="btn-close-arch" class="btn-secondary">Close</button>
+      </div>
+      
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Tab 1: AI Model Pipeline Diagram -->
+        <div class="arch-section-block">
+          <h3 style="color: var(--accent-cyan); font-family: var(--font-family-title); margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85rem;">1. AI Model Processing Pipeline</h3>
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 1rem;">End-to-end processing pipeline showing how geospatial raw images transform into heat stress recommendations.</p>
+          
+          <div class="flowchart-wrapper">
+            <svg viewBox="0 0 800 120" style="width: 100%; height: auto;">
+              <!-- Flow Nodes -->
+              <!-- Satellite Image -->
+              <rect x="10" y="30" width="80" height="40" rx="6" fill="rgba(6,182,212,0.15)" stroke="var(--accent-cyan)" stroke-width="1.5"></rect>
+              <text x="50" y="55" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Satellite Image</text>
+              
+              <path d="M 90 50 L 110 50" stroke="var(--text-muted)" stroke-width="1.5" marker-end="url(#arrow)"></path>
+              
+              <!-- GeoTIFF Ingestion -->
+              <rect x="110" y="30" width="85" height="40" rx="6" fill="rgba(99,102,241,0.15)" stroke="var(--accent-indigo)" stroke-width="1.5"></rect>
+              <text x="152.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">GeoTIFF Reader</text>
+              <text x="152.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Binary Tags Parser</text>
+              
+              <path d="M 195 50 L 215 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- Raster Processing -->
+              <rect x="215" y="30" width="85" height="40" rx="6" fill="rgba(99,102,241,0.15)" stroke="var(--accent-indigo)" stroke-width="1.5"></rect>
+              <text x="257.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Raster Algebra</text>
+              <text x="257.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">NDVI/LST Calibration</text>
+              
+              <path d="M 300 50 L 320 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- Feature Eng -->
+              <rect x="320" y="30" width="85" height="40" rx="6" fill="rgba(99,102,241,0.15)" stroke="var(--accent-indigo)" stroke-width="1.5"></rect>
+              <text x="362.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Feature Eng.</text>
+              <text x="362.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Friction / SVF / Wards</text>
+              
+              <path d="M 405 50 L 425 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- PIML Model -->
+              <rect x="425" y="30" width="95" height="40" rx="6" fill="rgba(168,85,247,0.15)" stroke="var(--accent-purple)" stroke-width="1.5"></rect>
+              <text x="472.5" y="48" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">CNN + XGBoost</text>
+              <text x="472.5" y="58" fill="var(--text-muted)" font-size="6" text-anchor="middle">Physics-Informed ML</text>
+              
+              <path d="M 520 50 L 540 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- SHAP explainability -->
+              <rect x="540" y="30" width="75" height="40" rx="6" fill="rgba(244,63,94,0.15)" stroke="var(--accent-rose)" stroke-width="1.5"></rect>
+              <text x="577.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">SHAP XAI</text>
+              <text x="577.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Attribution Vectors</text>
+              
+              <path d="M 615 50 L 635 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- GA Optimizer -->
+              <rect x="635" y="30" width="80" height="40" rx="6" fill="rgba(16,185,129,0.15)" stroke="var(--accent-emerald)" stroke-width="1.5"></rect>
+              <text x="675" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Genetic Solver</text>
+              <text x="675" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Budget Constraints</text>
+              
+              <path d="M 715 50 L 735 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- Recommendations -->
+              <rect x="735" y="30" width="55" height="40" rx="6" fill="rgba(16,185,129,0.15)" stroke="var(--accent-emerald)" stroke-width="1.5"></rect>
+              <text x="762.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Planning</text>
+              <text x="762.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Output ROI</text>
+              
+              <!-- Marker definitions -->
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ca3af"></path>
+                </marker>
+              </defs>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Tab 2: Deployment Architecture Flow -->
+        <div class="arch-section-block">
+          <h3 style="color: var(--accent-indigo); font-family: var(--font-family-title); margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.85rem;">2. System Deployment Architecture</h3>
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 1rem;">Production level deployment and scaling stack for government decision portals.</p>
+          
+          <div class="flowchart-wrapper">
+            <svg viewBox="0 0 800 120" style="width: 100%; height: auto;">
+              <!-- ISRO Satellite Source -->
+              <rect x="10" y="30" width="80" height="40" rx="6" fill="rgba(6,182,212,0.15)" stroke="var(--accent-cyan)" stroke-width="1.5"></rect>
+              <text x="50" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">ISRO Satellites</text>
+              <text x="50" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Resourcesat/Cartosat</text>
+              
+              <path d="M 90 50 L 110 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- Bhuvan Hub -->
+              <rect x="110" y="30" width="85" height="40" rx="6" fill="rgba(6,182,212,0.15)" stroke="var(--accent-cyan)" stroke-width="1.5"></rect>
+              <text x="152.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Bhuvan Geoportal</text>
+              <text x="152.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Raster Repositories</text>
+              
+              <path d="M 195 50 L 215 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- Raw TIFF files -->
+              <rect x="215" y="30" width="75" height="40" rx="6" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"></rect>
+              <text x="252.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">GeoTIFF Format</text>
+              <text x="252.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Binary Raw Data</text>
+              
+              <path d="M 290 50 L 310 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- Python FastAPI -->
+              <rect x="310" y="30" width="90" height="40" rx="6" fill="rgba(99,102,241,0.15)" stroke="var(--accent-indigo)" stroke-width="1.5"></rect>
+              <text x="355" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Python FastAPI</text>
+              <text x="355" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">REST Ingestion API</text>
+              
+              <path d="M 400 50 L 420 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- AI Core PyTorch -->
+              <rect x="420" y="30" width="85" height="40" rx="6" fill="rgba(168,85,247,0.15)" stroke="var(--accent-purple)" stroke-width="1.5"></rect>
+              <text x="462.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">PyTorch Inference</text>
+              <text x="462.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">PIML Models Engine</text>
+              
+              <path d="M 505 50 L 525 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- PostGIS -->
+              <rect x="525" y="30" width="80" height="40" rx="6" fill="rgba(99,102,241,0.15)" stroke="var(--accent-indigo)" stroke-width="1.5"></rect>
+              <text x="565" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">PostgreSQL / GIS</text>
+              <text x="565" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Spatial Vector DB</text>
+              
+              <path d="M 605 50 L 625 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- React Dashboard -->
+              <rect x="625" y="30" width="85" height="40" rx="6" fill="rgba(16,185,129,0.15)" stroke="var(--accent-emerald)" stroke-width="1.5"></rect>
+              <text x="667.5" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">React client</text>
+              <text x="667.5" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">Leaflet Web UI Map</text>
+              
+              <path d="M 710 50 L 730 50" stroke="var(--text-muted)" stroke-width="1.5"></path>
+              
+              <!-- Municipal Portal -->
+              <rect x="730" y="30" width="60" height="40" rx="6" fill="rgba(16,185,129,0.15)" stroke="var(--accent-emerald)" stroke-width="1.5"></rect>
+              <text x="760" y="50" fill="#ffffff" font-size="8" font-weight="600" text-anchor="middle">Government</text>
+              <text x="760" y="60" fill="var(--text-muted)" font-size="6" text-anchor="middle">SDSS Portal</text>
+            </svg>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+  </div>
+
+  <!-- SDG footer overlay -->
+  <footer class="un-sdg-footer">
+    <div class="sdg-badges-row">
+      <div class="sdg-badge badge-sdg11">
+        <span class="sdg-num">11</span>
+        <span class="sdg-desc">Sustainable Cities</span>
+      </div>
+      <div class="sdg-badge badge-sdg13">
+        <span class="sdg-num">13</span>
+        <span class="sdg-desc">Climate Action</span>
+      </div>
+      <div class="sdg-badge badge-sdg3">
+        <span class="sdg-num">3</span>
+        <span class="sdg-desc">Health & Wellbeing</span>
+      </div>
+    </div>
+    <div class="sdg-disclaimer">
+      Climatrix SDSS is aligned with United Nations Sustainable Development Goals (SDG) for localized urban climate resilience.
+    </div>
+  </footer>
+
+  <script src="model.js?v=4.0"></script>
+  <script src="optimizer.js?v=4.0"></script>
+  <script src="app_v4.js"></script>
+</body>
+</html>
